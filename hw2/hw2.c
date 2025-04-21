@@ -9,21 +9,22 @@ void fourthTask();
 
 int main() {
 	// 1. Вывести квадратную матрицу по заданому N.
-		
+	printf("Размерность матрицы N = %d\n", N);
+	printf("Квадратная матрица: \n");		
 	firstTask();
 
 	// 2. Вывести заданный массив размером N
 	// в обратном порядке. 
-
+        printf("Введите числа от 0 до %d: \n", N);
 	secondTask();
 
 	// 3. Заполнить верхний треугольник матрицы 1, а 
 	// нижний 0.	
-
+	printf("Матрица заполненная \"1\" в верхнем треугольнике: \n");
 	thirdTask();
 
 	// 4. Заполнить матрицу числами от 1 до N^2 улиткой.
-	
+	printf("Матрица-улитка:\n");
 	fourthTask();
 
 	return 0;
@@ -33,8 +34,7 @@ int main() {
 void firstTask() {
 	int value = 1;
 	int arr[N][N];
-	printf("Размерность матрицы N = %d\n", N);
-	printf("Квадратная матрица: \n");
+
 	for (int i = 0; i < N; i++) {
 		for (int j = 0; j < N; j++) {
 			arr[i][j] = value;
@@ -48,7 +48,6 @@ void firstTask() {
 
 void secondTask() {
         int arr[N];
-        printf("Введите числа от 0 до %d: \n", N);
         for (int i = 0; i < N; i++)
 		scanf("%d", &arr[i]);
         
@@ -65,7 +64,6 @@ void secondTask() {
 
 void thirdTask() {
 	int arr[N][N];
-	printf("Матрица заполненная \"1\" в верхнем треугольнике: \n");
 	for (int i = 0; i < N; i++) {
 		for (int j = 0; j < N; j++) {
 			arr[i][j] = (i + j >= N - 1) ? 0 : 1;
@@ -108,7 +106,6 @@ void fourthTask() {
 		}
 	}
 
-	printf("Матрица-улитка:\n");
 	for (int i = 0; i < N; i++) {
 		for (int j = 0; j < N; j++)
 			printf("%3d ", matrix[i][j]);
