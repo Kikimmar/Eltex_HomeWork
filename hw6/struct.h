@@ -16,5 +16,6 @@ struct Node {
 void PrintMenu();
 struct Node* CreateNode();
 void Append(struct Node** head_ref);
+void ShowAll(struct Node* list);
 
 #endif

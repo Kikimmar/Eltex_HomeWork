@@ -4,7 +4,7 @@
 #include "struct.h"
 
 void PrintMenu() {
-		printf("\nMenu: \n");
+	printf("\nMenu: \n");
 	printf("1. Добавить абонента\n");
 	printf("2. Удалить абонента\n");
 	printf("3. Поиск абонентов по имени\n");
@@ -41,12 +41,18 @@ void Append(struct Node** head_ref) {
 		return;
 	}
 	
-	struct Node* last = *head_ref;
-	while (last->next != NULL) last = last->next;
-	last->next = new_node;
-	new_node->prev = last;
+	struct Node* last_node = *head_ref;
+	while (last_node->next != NULL) last_node = last_node->next;
+	last_node->next = new_node;
+	new_node->prev = last_node;
 }
 
-		
+void ShowAll(struct Node* list) {
+	int i = 1;
+	while (list != NULL) {
+		printf("%d.%s %s %s \n", i, list->data.name, list->data.second_name, list->data.tel);
+		list = list->next;
+		i++;
+	}
 
-
+}
