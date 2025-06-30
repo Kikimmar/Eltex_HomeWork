@@ -17,9 +17,11 @@ int main() {
 			break;
 		case 2:
 			//удаление абонента
+			DeleteAbonent(&list);
 			break;
 		case 3:
 			//поиск абонента по имени
+			SearchByName(list);
 			break;
 		case 4:
 			//вывод всех записей
@@ -27,6 +29,7 @@ int main() {
 			break;
 		case 5:
 			//выход
+			ExitProgram(&list);
 			break;
 		default:
 			printf("Вы ввели неверное значение, попробуйте еще.\n");
