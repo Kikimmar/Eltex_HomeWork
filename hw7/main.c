@@ -1,4 +1,8 @@
-#include <stdlib.h>
+#include <stdio.h>
+#include "add.h"
+#include "sub.h"
+#include "mul.h"
+#include "div.h"
 
 void PrintMenu();
 
@@ -22,6 +26,9 @@ int main() {
             case 4:
                 printf("Результат: %d", Div());
                 break;        
+            case 5:
+                printf("Выход из программы...\n");
+                break;
             default:
                 printf("\nВы ввели неверное значение, попробуйте еще.\n");
                 break;
