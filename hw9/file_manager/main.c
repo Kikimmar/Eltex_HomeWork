@@ -13,22 +13,42 @@ void sig_winch(int signo)
 
 int main()
 {
-   initscr();
-   signal(SIGWINCH, sig_winch);
-   cbreak();
-   noecho();
 
-   int height = LINES;
-   int width = COLS;
+	WINDOW* wnd;
+	WINDOW* subwnd;
 
-   WINDOW* win = newwin(height, width, 2, 2);
+	initscr();
+	signal(SIGWINCH, sig_winch);
+	cbreak();
+	curs_set(FALSE);
+	start_color();
+	refresh();
 
-   box(win, 0, 0);
-   wrefresh(win);
+	int height, width;
+	getmaxyx(stdscr, height, width);
 
-   getch();
-   delwin(win);    
+	init_pair(1, COLOR_BLUE, COLOR_GREEN);
+	init_pair(2, COLOR_YELLOW, COLOR_BLUE);
 
-   endwin();
-   return 0;
+	wnd = newwin(height, width, 0, 0);
+	wattron(wnd, COLOR_PAIR(1));
+	box(wnd, '|', '-');
+	//mvwprintw(wnd, 0, 0, "Main window");
+
+	subwnd = derwin(wnd, 16, 16, 1, 1);
+	wattron(subwnd, COLOR_PAIR(2));
+	wattron(subwnd, A_BOLD);
+	mvwprintw(subwnd, 0, 0, "Subwindow");
+	
+	wrefresh(subwnd);
+	wrefresh(wnd);
+
+	getch();
+
+	delwin(subwnd);
+	delwin(wnd);
+	refresh();
+
+	endwin();
+	return 0;
 }
