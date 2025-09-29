@@ -7,18 +7,18 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <sys/wait.h>
-#include <fcntl.h>
+#include <sys/un.h>
+#include <errno.h>
 
 #define PORT 12345
 #define BACKLOG 10
 #define WORKER_MAX 5
 #define BUFFER_SIZE 64
 
-typedef struct
+typedef struct 
 {
     pid_t pid;
-    int pipe_fd[2];
+    int comm_fd;
     int busy;
 } worker_t;
 
@@ -27,9 +27,11 @@ int worker_count = 0;
 
 //=============================================================================
 void get_time(char *buffer, size_t size);
-void worker_loop(int read_fd, int write_fd);
+void worker_loop(int comm_fd);
 int spawn_worker(int index);
 int find_free_worker();
+int send_fd(int socket, int fd_to_send);
+int recv_fd(int socket);
 
 //=============================================================================
 int main()
@@ -38,7 +40,6 @@ int main()
     struct sockaddr_in server_addr, client_addr;
     socklen_t addr_len = sizeof(client_addr);
 
-    // Create the server-socket
     server_sock = socket(AF_INET, SOCK_STREAM, 0);
     if (server_sock < 0)
     {
@@ -46,11 +47,9 @@ int main()
         exit(EXIT_FAILURE);
     }
 
-    // Settings for fast realod
     int opt = 1;
     setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-    // Setting up the address
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
@@ -70,9 +69,9 @@ int main()
         exit(EXIT_FAILURE);
     }
 
-    printf("Listening server start on port %d\n", PORT);
+    printf("Listening server start on potr: %d\n", PORT);
 
-    // Creatin a minimal number of support servers
+    // Initialize the firs several workers
     int initial_workers = 2;
     for (int i = 0; i < initial_workers; i++)
     {
@@ -83,7 +82,7 @@ int main()
         }
     }
 
-    // Main loop the listen-server
+    // The main loop server/ Connecting the clients and transfer to the workers
     while (1)
     {
         int client_fd = accept(server_sock, (struct sockaddr*)&client_addr, &addr_len);
@@ -93,63 +92,63 @@ int main()
             continue;
         }
         printf("New client: %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
-        
-        // Searching the free support-server
+
         int idx = find_free_worker();
 
+        // If there are no free workers, but you can create more, we create a new one.
         if (idx < 0 && worker_count < WORKER_MAX)
         {
-            // There is no dree one, but can create a new one
             idx = worker_count;
             if (spawn_worker(idx) < 0)
             {
                 close(client_fd);
                 continue;
-            }
+            } 
         }
 
+        // If there are no free workers and the maximum number is reached,
+        // we refuse the client.
         if (idx < 0)
         {
-            printf("All workers busy, rejecting connections\n");
+            printf("All workers busy, rejecting connection\n");
             close(client_fd);
             continue;
         }
-        
-        // Transfer the client;s socket to the support-server
-        // via pipe. Sending the fd
-        if (write(workers[idx].pipe_fd[1], &client_fd, sizeof(client_fd)) != sizeof(client_fd))
+
+        // We transfer the client socket to the worker via unix socketpair
+        // with the transfer of the descriptor
+        if (send_fd(workers[idx].comm_fd, client_fd) < 0)
         {
-            perror("write to worker pipe");
+            perror("send_fd to worker");
             close(client_fd);
             workers[idx].busy = 0;
             continue;
         }
 
         workers[idx].busy = 1;
+        close(client_fd);
 
-        // Checking whether any shutdown signals have come from the support-server
-        for (int i = 0; i < worker_count; i++)
+        // We check the messages from the workers that they are free
+        for  (int i = 0; i < worker_count; i++)
         {
             if (workers[i].busy)
             {
                 char status;
-                ssize_t r = read(workers[i].pipe_fd[0], &status, 1);
-                if (r == 1)
-                {
-                    // The support-server is now free
-                    workers[i].busy = 0;
-                }
+                ssize_t r = read(workers[i].comm_fd, &status, 1);
+                if (r == 1 && status == '1')
+                    {
+                        // The worker is free and ready to accept a new client.
+                        workers[i].busy = 0;
+                    }
             }
         }
-        // ===
     }
-
     close(server_sock);
     return 0;
 }
 
 //=============================================================================
-// To get the current time
+// We get the current date and time in string format
 void get_time(char *buffer, size_t size)
 {
     time_t now = time(NULL);
@@ -158,105 +157,148 @@ void get_time(char *buffer, size_t size)
 }
 
 //=============================================================================
-// Support-server, the processing cycle loop 
-void worker_loop(int read_fd, int write_fd)
+// The main worker cycle receives client sockets through unix socket
+// and processes them
+void worker_loop(int comm_fd)
 {
-    char buffer[BUFFER_SIZE];
-
     while (1)
     {
-        // Waiting from the listen-server the signal about a new client
-        // reed client_fd grom pipe
-        int client_fd;
-        ssize_t r = read(read_fd, &client_fd, sizeof(client_fd));
-        if (r <= 0)
+        // We accept the client descriptor from the main server
+        int client_fd = recv_fd(comm_fd);
+        if (client_fd < 0)
         {
+            // Error
             break;
         }
-
-        // Client processing - send the time
+        char buffer[BUFFER_SIZE];
         get_time(buffer, sizeof(buffer));
-        send(client_fd, buffer, strlen(buffer), 0);
 
+        // Send to the client the current time and date
+        send(client_fd, buffer, strlen(buffer), 0);
+ 
         close(client_fd);
 
-        // Inform the listening server that we are readey for the next client
+        // We send a signal to the main server that
+        // the worker is free ('1' - free)
         char status = '1';
-        write(write_fd, &status, 1);
+        write(comm_fd, &status, 1);
     }
-    close(read_fd);
-    close(write_fd);
+    close(comm_fd);
     exit(0);
 }
 
 //=============================================================================
-// Creatind and starting a new support-server
+//Creating a worker process and a unix socketpair to communicate with it
 int spawn_worker(int index)
 {
-    if (pipe(workers[index].pipe_fd) == -1)
-    {
-        perror("pipe");
-        return -1;
-    }
-
-    int parent_write = workers[index].pipe_fd[1];
-    int child_read = workers[index].pipe_fd[0];
-
-    // Creating the second pipe for feedback - child to parent
-    int pipe_back[2];
-    if (pipe(pipe_back) == -1)
-    {
-        perror("pipe");
-        close(workers[index].pipe_fd[0]);
-        close(workers[index].pipe_fd[1]);
-        return -1;
-    }
+    int sv[2]; // socketpair for bidirectional communication between server and worker
     
-    int parent_read = pipe_back[0];
-    int child_write = pipe_back[1];
+    // Creating a socketpair of the AF_UNIX domain,
+    //  the SOCK_DGRAM type for transmitting fd
+    if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) == -1)
+    {
+        perror("socketpair");
+        return -1;
+    }
 
     pid_t pid = fork();
     if (pid < 0)
     {
         perror("fork");
-        close(workers[index].pipe_fd[0]);
-        close(workers[index].pipe_fd[1]);
-        close(pipe_back[0]);
-        close(pipe_back[1]);
+        close(sv[0]);
+        close(sv[1]);
         return -1;
     }
-
     if (pid == 0)
     {
-        close(parent_write);
-        close(parent_read);
-
-        // Starting the loop client processing
-        worker_loop(child_read, child_write);
+       // In the child process, we close the server side
+       close(sv[0]);
+       // Start the worker loop
+       worker_loop(sv[1]);
+       exit(0);
     }
-
-    close(child_read);
-    close(child_write);
+    // In the parent process, we close the worker's side
+    close(sv[1]);
 
     workers[index].pid = pid;
-    workers[index].pipe_fd[1] = parent_write;
-    workers[index].pipe_fd[0] = parent_read;
+    workers[index].comm_fd = sv[0];
     workers[index].busy = 0;
 
     worker_count++;
     return 0;
 }
-
+ 
 //=============================================================================
-// Searching the free support-server
-int find_free_worker()
+// A function for sending a file descriptor via a unix domain socket
+int send_fd(int socket, int fd_to_send)
 {
-    for (int i = 0; i < WORKER_MAX; i++)
+    struct msghdr msg = {0};
+    char buf[CMSG_SPACE(sizeof(fd_to_send))], dummy = '*';
+    struct iovec io = { .iov_base = &dummy, .iov_len = sizeof(dummy) };
+
+    msg.msg_iov = &io;
+    msg.msg_iovlen = 1;
+
+    msg.msg_control = buf;
+    msg.msg_controllen = sizeof(buf);
+    
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+    cmsg->cmsg_level = SOL_SOCKET;
+    cmsg->cmsg_type = SCM_RIGHTS;
+    cmsg->cmsg_len = CMSG_LEN(sizeof(fd_to_send));
+
+    *((int *) CMSG_DATA(cmsg)) = fd_to_send;
+
+    msg.msg_controllen = cmsg->cmsg_len;
+
+    if (sendmsg(socket, &msg, 0) < 0)
     {
-        if (workers[i].busy == 0)
-        {
-            return i;
-        }
+        perror("sendmsg");
         return -1;
     }
+    return 0;
+}
+
+//=============================================================================
+// A function for receiving a file descriptor via a unix domain socket
+int recv_fd(int socket)
+{
+    struct msghdr msg = {0};
+    char m_buffer[1], c_buffer[CMSG_SPACE(sizeof(int))];
+    struct iovec io = { .iov_base = m_buffer, .iov_len = sizeof(m_buffer) };
+    msg.msg_iov = &io;
+    msg.msg_iovlen = 1;
+
+    msg.msg_control = c_buffer;
+    msg.msg_controllen = sizeof(c_buffer);
+
+    if (recvmsg(socket, &msg, 0) < 0)
+    {
+        perror("recvmsg");
+        return -1;
+    }
+
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+
+    if (cmsg == NULL || cmsg->cmsg_type != SCM_RIGHTS)
+    {
+        fprintf(stderr, "No file descriptor received\n");
+        return -1;
+    }
+
+    int fd;
+    memcpy(&fd, CMSG_DATA(cmsg), sizeof(fd));
+    return fd;
+}
+
+//=============================================================================
+// Search for a free worker (busy == 0). If not, return -1
+int find_free_worker()
+{
+    for (int i = 0; i < worker_count; i++)
+    {
+        if (workers[i].busy == 0)
+            return i;
+    }
+    return -1;
 }

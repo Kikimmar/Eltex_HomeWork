@@ -8,7 +8,7 @@
 
 #define SERVER_IP "127.0.0.1"
 #define SERVER_PORT 12345
-#define THREAD_COUNT 5
+#define THREAD_COUNT 10
 #define BUFFER_SIZE 128
 
 void *client_thread(void *arg);
