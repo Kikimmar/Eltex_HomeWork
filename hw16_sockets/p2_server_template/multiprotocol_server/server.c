@@ -135,7 +135,7 @@ int main()
 
                     if (strcmp(buffer, "Hello") == 0)
                     {
-                        const char *response = "Salut\n";
+                        const char *response = "Salut from TCP\n";
                         write(client_fd, response, strlen(response));
                     }
                 }
@@ -160,7 +160,7 @@ int main()
                                                     buffer);
                 if (strcmp(buffer, "Hi") == 0)
                 {
-                    const char *udp_response = "Salut\n";
+                    const char *udp_response = "Salut form UDP\n";
                     sendto(udp_socket, udp_response, strlen(udp_response), 0, (struct sockaddr*)&client_addr, client_len);
                 }
             }
