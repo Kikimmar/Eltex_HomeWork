@@ -31,7 +31,7 @@ int main()
         }
 
         printf("Received TCP packet of %zd bytes\n", bytes);
-        // Здесь без разбора заголовков можно обработать или сохранить, если нужно
+
     }
 
     close(sockfd);
