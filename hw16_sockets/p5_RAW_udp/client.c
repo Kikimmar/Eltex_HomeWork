@@ -61,6 +61,43 @@ int main()
     }
     printf("Sent %zd bytes to server.\n", sent_bytes);
 
+    while (1)
+    {
+        ssize_t bytes = recvfrom(sock_fd, buffer, BUF_SIZE, 0, NULL, NULL);
+        if (bytes < 0)
+        {
+            perror("recvfrom");
+            close(sock_fd);
+            exit(EXIT_FAILURE);
+        }
+        
+        struct iphdr *ip = (struct iphdr*)buffer;
+        unsigned int ip_hdr_len = ip->ihl * 4;
+        if (bytes < ip_hdr_len + UDP_HDRLEN)
+        {
+            continue;
+        }
+        
+        struct udphdr *udp_recv = (struct udphdr*)(buffer + ip_hdr_len);
+        if (htons(udp_recv->source) != SERVER_PORT)
+        {
+            continue;
+        }
+
+        int data_len = bytes - ip_hdr_len - UDP_HDRLEN;
+        if (data_len >= BUF_SIZE)
+        {
+            data_len = BUF_SIZE - 1;
+        }
+
+        char* data = buffer + ip_hdr_len + UDP_HDRLEN;
+        data[data_len] = '\0';
+
+        printf("Received msg from server: %s\n", data);
+       break; 
+
+    }
+
     close(sock_fd);
     return 0;
 }
