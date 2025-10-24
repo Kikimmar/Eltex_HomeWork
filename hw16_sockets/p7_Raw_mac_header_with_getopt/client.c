@@ -26,14 +26,15 @@ int parse_mac(const char *str, unsigned char *mac);
 int main(int argc, char *argv[])
 {
     int opt;
+    char ifname[IF_NAMESIZE] = "enp34s0";
     char client_ip_str[INET_ADDRSTRLEN] = "192.168.1.100";
     char server_ip_str[INET_ADDRSTRLEN] = "192.168.1.200";
     unsigned char client_mac[6] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55};
     unsigned char server_mac[6] = {0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb};
 
     // Чтение параметров: -с клиентский IP, -s серверный IP
-    // -C MAC клиента, -S MAC сервера
-    while((opt = getopt(argc, argv, "c:s:C:S:")) != -1)
+    // -C MAC клиента, -S MAC сервера, -i имя интерфейса
+    while((opt = getopt(argc, argv, "c:s:C:S:i:")) != -1)
     {
         switch(opt)
         {
@@ -58,6 +59,10 @@ int main(int argc, char *argv[])
                     fprintf(stderr, "Invalid serveer MAC format\n");
                     return 1;
                 }
+                break;
+            case 'i':
+                strncpy(if_name, optarg, IF_NAMESIZE - 1);
+                if_name[IF_NAMESIZE - 1] = '\0';
                 break;
             default:
                 fprintf(stderr, "Usage:%s[-c client ip][-s server_ip][-C client_mac][-S sever_mac]\n", argv[0]);
@@ -90,7 +95,7 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    unsigned int ifindex = if_nametoindex("enp34s0");
+    unsigned int ifindex = if_nametoindex(if_name);
     if (ifindex == 0)
     {
         perror("if_nametoindex");
