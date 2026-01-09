@@ -14,14 +14,10 @@
 #include <arpa/inet.h>
 
 #define BUF_SIZE 1500
-
 #define CLIENT_PORT 54321
 #define SERVER_PORT 12345
 
-//Checksum IP_header
 unsigned short checksum(void *vdata, size_t length);
-
-// Parsing MAC from string "XX:XX:XX:XX:XX:XX"
 int parse_mac(const char *str, unsigned char *mac);
 
 int main(int argc, char *argv[])
@@ -33,245 +29,166 @@ int main(int argc, char *argv[])
     unsigned char client_mac[6] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55};
     unsigned char server_mac[6] = {0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb};
 
-    // Чтение параметров: -с клиентский IP, -s серверный IP
-    // -C MAC клиента, -S MAC сервера, -i имя интерфейса
     while((opt = getopt(argc, argv, "c:s:C:S:i:")) != -1)
     {
         switch(opt)
         {
-            case 'c':
-                strncpy(client_ip_str,optarg, INET_ADDRSTRLEN - 1);
-                client_ip_str[INET_ADDRSTRLEN - 1] = '\0';
-                break;
-            case 's':
-                strncpy(server_ip_str, optarg, INET_ADDRSTRLEN - 1);
-                server_ip_str[INET_ADDRSTRLEN - 1] = '\0';
-                break;
-            case 'C':
-                if (!parse_mac(optarg, client_mac))
-                {
-                    fprintf(stderr, "Invalid client MAC format\n");
-                    return 1;
-                }
-                break;
-            case 'S':
-                if (!parse_mac(optarg, server_mac))
-                {
-                    fprintf(stderr, "Invalid serveer MAC format\n");
-                    return 1;
-                }
-                break;
-            case 'i':
-                strncpy(if_name, optarg, IF_NAMESIZE - 1);
-                if_name[IF_NAMESIZE - 1] = '\0';
-                break;
-            default:
-                fprintf(stderr, "Usage:%s[-c client ip][-s server_ip][-C client_mac][-S sever_mac]\n", argv[0]);
-                return -1;
+            case 'c': strncpy(client_ip_str, optarg, INET_ADDRSTRLEN - 1); client_ip_str[INET_ADDRSTRLEN - 1] = '\0'; break;
+            case 's': strncpy(server_ip_str, optarg, INET_ADDRSTRLEN - 1); server_ip_str[INET_ADDRSTRLEN - 1] = '\0'; break;
+            case 'C': if (!parse_mac(optarg, client_mac)) { fprintf(stderr, "Invalid client MAC\n"); return 1; } break;
+            case 'S': if (!parse_mac(optarg, server_mac)) { fprintf(stderr, "Invalid server MAC\n"); return 1; } break;
+            case 'i': strncpy(if_name, optarg, IF_NAMESIZE - 1); if_name[IF_NAMESIZE - 1] = '\0'; break;
+            default: 
+                fprintf(stderr, "Usage: %s [-c client_ip] [-s server_ip] [-C client_mac] [-S server_mac] [-i interface]\n", argv[0]);
+                return 1;
         }
     }
 
-    printf("Client IP: %s\nServer IP: %s\n", client_ip_str, server_ip_str);
-    printf("Client MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
-            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
-    printf("Server MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
-            server_mac[0], server_mac[1], server_mac[2], server_mac[3], server_mac[4], server_mac[5]);
-
-
-    int sock_fd;
-    char buffer[BUF_SIZE];
-    char *data;
-    struct sockaddr_ll socket_addr;
-    struct iphdr *ip;
-    struct udphdr *udp;
-   
-    const char *msg = "Hello, server";
-    size_t msg_len = strlen(msg);
-   
-
-    sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    if (sock_fd < 0)
-    {
-        perror("socket");
-        exit(EXIT_FAILURE);
-    }
-
-    unsigned int ifindex = if_nametoindex(if_name);
-    if (ifindex == 0)
-    {
-        perror("if_nametoindex");
-        close(sock_fd);
-        exit(EXIT_FAILURE);
-    }
-
-    // Заполняем Ethernet заголовк (14 байт)
-    unsigned char *ethernet_header = (unsigned char*)buffer;
-    memcpy(ethernet_header, server_mac, 6);
-    memcpy(ethernet_header + 6, client_mac, 6);
-    ethernet_header[12] = ETH_P_IP >> 8;
-    ethernet_header[13] = ETH_P_IP & 0xff;
-
-    // IP header
-    ip = (struct iphdr *)(buffer + ETH_HLEN);
-    memset(ip, 0, sizeof(struct iphdr));
-    ip->version = 4;
-    ip->ihl = 5;
-    ip->tos = 0;
-    ip->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + msg_len);
-    ip->id = htons(0);
-    ip->frag_off = 0;
-    ip->ttl = 255;
-    ip->protocol = IPPROTO_UDP;
-    ip->check = 0;
-    ip->saddr = inet_addr(client_ip_str);
-    ip->daddr = inet_addr(server_ip_str);
-    ip->check = checksum(ip, ip->ihl*4);
-
-    // UDP header
-    udp = (struct udphdr *)(buffer + ETH_HLEN + ip->ihl*4);
-    udp->source = htons(CLIENT_PORT);
-    udp->dest = htons(SERVER_PORT);
-    udp->len = htons(sizeof(struct udphdr) + msg_len);
-    udp->check = 0;
+    printf("Client IP: %s, Server IP: %s, Interface: %s\n", client_ip_str, server_ip_str, if_name);
+    printf("Client MAC: %02x:%02x:%02x:%02x:%02x:%02x\nServer MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+           client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+           server_mac[0], server_mac[1], server_mac[2], server_mac[3], server_mac[4], server_mac[5]);
 
     
-    data = buffer + ETH_HLEN + ip->ihl*4 + sizeof(struct udphdr);
-    memcpy(data, msg, msg_len);
+    int sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    if (sock_fd < 0) 
+        { 
+            perror("socket"); 
+            exit(EXIT_FAILURE); 
+        }
 
-    memset(&socket_addr, 0, sizeof(struct sockaddr_ll));
+    unsigned int ifindex = if_nametoindex(if_name);
+    if (ifindex == 0) 
+    { 
+        perror("if_nametoindex"); 
+        close(sock_fd); 
+        exit(EXIT_FAILURE); 
+    }
+
+    struct sockaddr_ll socket_addr;
+    memset(&socket_addr, 0, sizeof(socket_addr));
     socket_addr.sll_family = AF_PACKET;
-    //socket_address.sll_protocol = htons(ETH_P_IP);
     socket_addr.sll_ifindex = ifindex;
-    //socket_address.hatype = ;
-    //socket_address.pkttype = ;
     socket_addr.sll_halen = ETH_ALEN;
     memcpy(socket_addr.sll_addr, server_mac, 6);
 
-    size_t packet_len = ETH_HLEN + ntohs(ip->tot_len);  //общая длинна Eth + IP + UDP + данные
-
-    ssize_t sent_bytes = sendto(sock_fd, buffer, packet_len, 0,
-            (struct sockaddr *)&socket_addr, sizeof(struct sockaddr_ll));
-    if (sent_bytes < 0)
-    {
-        perror("sendto");
-        close(sock_fd);
-        exit(EXIT_FAILURE);
-    }
-    printf("Sent %zd bytes to server.\n", sent_bytes);
+    char buffer[BUF_SIZE];
     printf("Enter messages or 'CLOSE' to exit:\n");
 
-    while (1) {
+    while (1) 
+    {
         char input[BUF_SIZE];
-        if (fgets(input, sizeof(input), stdin))
-        {
-            if (ferror(stdin))
-            {
-                perror("fgets error");
-                break;
-            }
+        if (fgets(input, sizeof(input), stdin) == NULL) 
             break;
-        }
-
-        input[strcspn(input, "\n")] = 0;  // убираем \n
+        
+        input[strcspn(input, "\n")] = 0;
         
         if (strcmp(input, "CLOSE") == 0) 
         {
-            // Отправляем сообщение о закрытии
-            const char *close_msg = "CLOSE";
-            size_t msg_len = strlen(close_msg);
-            
-            // Обновляем IP пакет
-            ip->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + msg_len);
-            ip->check = 0;
-            ip->check = checksum(ip, ip->ihl*4);
-            
-            // Обновляем UDP
-            udp->len = htons(sizeof(struct udphdr) + msg_len);
-            udp->check = 0;
-            
-            data = buffer + ETH_HLEN + ip->ihl*4 + sizeof(struct udphdr);
-            memcpy(data, close_msg, msg_len);
-            
-            packet_len = ETH_HLEN + ntohs(ip->tot_len);
-            
-            sendto(sock_fd, buffer, packet_len, 0, (struct sockaddr *)&socket_addr, sizeof(struct sockaddr_ll));
-            printf("Sent CLOSE message\n");
-            break;
+            printf("Sending CLOSE...\n");
+            // Отправляем CLOSE и выходим
         }
         
-        // Обычное сообщение
         size_t msg_len = strlen(input);
+        
+        // Ethernet заголовок
+        unsigned char *eth = (unsigned char*)buffer;
+        memcpy(eth, server_mac, 6);        // Destination MAC (server)
+        memcpy(eth + 6, client_mac, 6);    // Source MAC (client)
+        eth[12] = ETH_P_IP >> 8; eth[13] = ETH_P_IP & 0xFF;
+
+        // IP заголовок
+        struct iphdr *ip = (struct iphdr*)(buffer + ETH_HLEN);
+        memset(ip, 0, sizeof(struct iphdr));
+        ip->version = 4;
+        ip->ihl = 5;
         ip->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + msg_len);
-        ip->check = 0;
+        ip->id = htons(54321);  // Уникальный ID
+        ip->frag_off = 0;
+        ip->ttl = 64;
+        ip->protocol = IPPROTO_UDP;
+        ip->saddr = inet_addr(client_ip_str);
+        ip->daddr = inet_addr(server_ip_str);
         ip->check = checksum(ip, ip->ihl*4);
-        
+
+        // UDP заголовок
+        struct udphdr *udp = (struct udphdr*)(buffer + ETH_HLEN + ip->ihl*4);
+        udp->source = htons(CLIENT_PORT);
+        udp->dest = htons(SERVER_PORT);
         udp->len = htons(sizeof(struct udphdr) + msg_len);
-        udp->check = 0;
-        
-        data = buffer + ETH_HLEN + ip->ihl*4 + sizeof(struct udphdr);
+        udp->check = 0;  // UDP checksum отключен
+
+        // Данные
+        char *data = buffer + ETH_HLEN + ip->ihl*4 + sizeof(struct udphdr);
         memcpy(data, input, msg_len);
+        data[msg_len] = 0;
+
+        size_t packet_len = ETH_HLEN + ntohs(ip->tot_len);
         
-        packet_len = ETH_HLEN + ntohs(ip->tot_len);
-        sendto(sock_fd, buffer, packet_len, 0, (struct sockaddr *)&socket_addr, sizeof(struct sockaddr_ll));
-        printf("Sent: %s\n", input);
+        ssize_t sent = sendto(sock_fd, buffer, packet_len, 0, (struct sockaddr*)&socket_addr, sizeof(socket_addr));
+        if (sent < 0) 
+            { 
+                perror("sendto"); 
+                continue; 
+            }
         
+        printf("Sent (%zd bytes): %s\n", sent, input);
+        
+        if (strcmp(input, "CLOSE") == 0) 
+            break;
+
         // Получаем ответ
         ssize_t bytes = recvfrom(sock_fd, buffer, BUF_SIZE, 0, NULL, NULL);
-        if (bytes < 0) 
-        {
-            perror("recvfrom");
+        if (bytes < (ssize_t)(ETH_HLEN + sizeof(struct iphdr))) 
             continue;
-        }
-        
-        if (bytes < (ssize_t)(ETH_HLEN + sizeof(struct iphdr) + sizeof(struct udphdr))) continue;
         
         struct iphdr *recv_ip = (struct iphdr*)(buffer + ETH_HLEN);
-        unsigned int recv_ip_header_len = recv_ip->ihl * 4;
-        struct udphdr *udp_recv = (struct udphdr*)(buffer + ETH_HLEN + recv_ip_header_len);
+        if (recv_ip->protocol != IPPROTO_UDP) 
+            continue;
         
-        if (recv_ip->protocol != IPPROTO_UDP || 
-            ntohs(udp_recv->source) != SERVER_PORT || 
-            ntohs(udp_recv->dest) != CLIENT_PORT) continue;
+        unsigned int ip_len = recv_ip->ihl * 4;
+        struct udphdr *recv_udp = (struct udphdr*)(buffer + ETH_HLEN + ip_len);
+        if (ntohs(recv_udp->source) != SERVER_PORT || ntohs(recv_udp->dest) != CLIENT_PORT) 
+            continue;
         
-        int data_len = bytes - ETH_HLEN - recv_ip_header_len - sizeof(struct udphdr);
-        char* recv_data = buffer + ETH_HLEN + recv_ip_header_len + sizeof(struct udphdr);
-        recv_data[data_len] = '\0';
-        
-        printf("Server: %s\n", recv_data);
+        int data_len = bytes - ETH_HLEN - ip_len - sizeof(struct udphdr);
+        if (data_len > 0) 
+        {
+            char *recv_data = buffer + ETH_HLEN + ip_len + sizeof(struct udphdr);
+            recv_data[data_len] = 0;
+            printf("Server: %s\n", recv_data);
+        }
     }
 
     close(sock_fd);
-
     return 0;
 }
 
-//=============================================================================
 unsigned short checksum(void *vdata, size_t length)
 {
-    char *data = (char*)vdata;
-    uint32_t aac = 0xffff;
+    uint32_t acc = 0xffff;
+    uint8_t *data = vdata;
 
-    // Считаем сумму 16 битных слов
-    for (size_t i = 0; i + 1 < length; i += 2)
+    for (size_t i = 0; i + 1 < length; i += 2) 
     {
         uint16_t word;
         memcpy(&word, data + i, 2);
-        aac += ntohs(word);
-        if (aac > 0xffff)
-            aac -= 0xffff;
+        acc += ntohs(word);
+        if (acc > 0xffff) 
+            acc -= 0xffff;
     }
-    // Если длинна нечетная - добавляем последний байт
-    if (length & 1)
+    
+    if (length & 1) 
     {
         uint16_t word = 0;
         memcpy(&word, data + length - 1, 1);
-        aac += ntohs(word);
-        if (aac > 0xffff)
-            aac -= 0xffff;
+        acc += ntohs(word);
+        if (acc > 0xffff) 
+            acc -= 0xffff;
     }
-    return htons(~aac);
+    return htons(~acc);
 }
-//=============================================================================
+
 int parse_mac(const char *str, unsigned char *mac)
 {
     return sscanf(str, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
